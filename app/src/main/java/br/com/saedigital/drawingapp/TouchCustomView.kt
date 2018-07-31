@@ -1,11 +1,10 @@
 package br.com.saedigital.drawingapp
 
-import android.app.AlertDialog
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
 import android.os.Build
 import android.util.AttributeSet
-import android.util.Log
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
@@ -16,11 +15,6 @@ class TouchCustomView : View {
     constructor(context: Context?, attrs: AttributeSet?) : super(context, attrs)
     constructor(context: Context?, attrs: AttributeSet?, defStyleAttr: Int) : super(context, attrs, defStyleAttr)
 
-    init {
-        initializeDrawingView()
-    }
-
-    //Ferramentas
     companion object {
         const val PENCIL = 1
         const val LINE = 2
@@ -33,112 +27,67 @@ class TouchCustomView : View {
     private var drawPaint: Paint? = null
     private var canvasPaint: Paint? = null
     private var fillPaint: Paint? = null
-    private var strokePaint: Paint? = null
     private var canvasBitmap: Bitmap? = null
     private var drawCanvas: Canvas? = null
     private var start = PointF()
     private val m = PointF()
-
     private var coordDraw: Draw? = null
     private var selectedDraw: Draw? = null
-
     private var drawCoordinate: DrawCoordinate? = null
-
     private var tool: Int = 0
     private var shape: Float = 0.0f
-    var selectedShape: Float = 1.0f
+    private var fill: Boolean = false
+    private var drawColor: String = "0000FF"
+    private var selectedShape: Float = 1.0f
         get() {
             return if(selectedDraw == null) shape else selectedDraw!!.shape
         }
-    private var drawColor: String = "0000FF"
-    var selectedFill: Boolean = false
-    get() {
-        return if(selectedDraw == null) fill else selectedDraw!!.fill
+    private var selectedFill: Boolean = false
+        get() {
+            return if(selectedDraw == null) fill else selectedDraw!!.fill
+        }
+
+    private var list: List<Draw>? = null
+
+    init {
+        initializeDrawingView()
     }
-    private var fill: Boolean = false
-    private var isDrawing: Boolean = false
-
-    private fun initializeDrawingView() {
-
-        drawPath = Path()
-
-        drawCanvas = Canvas()
-
-        canvasPaint = Paint(Paint.DITHER_FLAG)
-        canvasPaint!!.isAntiAlias = true
-        canvasPaint!!.isDither = true
-        canvasPaint!!.style = Paint.Style.STROKE
-        canvasPaint!!.strokeJoin = Paint.Join.ROUND
-        canvasPaint!!.strokeCap = Paint.Cap.ROUND
-        canvasPaint!!.strokeWidth = shape
-
-        drawPaint = Paint(Paint.DITHER_FLAG)
-        drawPaint!!.isAntiAlias = true
-        drawPaint!!.isDither = true
-        drawPaint!!.style = Paint.Style.STROKE
-        drawPaint!!.strokeJoin = Paint.Join.ROUND
-        drawPaint!!.strokeCap = Paint.Cap.ROUND
-        drawPaint!!.strokeWidth = shape
-
-        //Fill e Stroke
-        fillPaint = Paint(Paint.DITHER_FLAG)
-        fillPaint!!.isAntiAlias = true
-        fillPaint!!.isDither = true
-        fillPaint!!.style = Paint.Style.FILL
-        fillPaint!!.strokeJoin = Paint.Join.ROUND
-        fillPaint!!.strokeCap = Paint.Cap.ROUND
-        fillPaint!!.strokeWidth = shape
-
-        strokePaint = Paint(Paint.DITHER_FLAG)
-        strokePaint!!.isAntiAlias = true
-        strokePaint!!.isDither = true
-        strokePaint!!.style = Paint.Style.STROKE
-        strokePaint!!.strokeJoin = Paint.Join.ROUND
-        strokePaint!!.strokeCap = Paint.Cap.ROUND
-        strokePaint!!.strokeWidth = 1F
-
-        initTool()
-    }
-
-    var list: List<Draw>? = null
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
 
-        if (canvas != null && canvasBitmap != null) {
-
-            if (list == null) {
-                isDrawing = true
-
-                list = DataManager.getDrawList()
-
-                for (draw in list!!) {
-                    selectedDraw = draw
-
-                    for(coordinate in draw.coordinates) {
-
-                        drawCoordinate = coordinate
-
-                        when (coordinate.drag) {
-                            0 -> onTouchEventActionDown()
-                            1 -> onTouchEventActionMove()
-                            2 -> onTouchEventActionUp()
-                        }
-                        drawTool(canvas)
-                    }
-                }
-                selectedDraw = null
-                drawCoordinate = null
-                return
-            }
-
-            if (isDrawing) {
-                drawTool(canvas)
-            }
+        if (canvas != null && onDrawDB(canvas)) {
+            drawTool(canvas)
         }
     }
 
-    fun drawTool(canvas: Canvas) {
+    private fun onDrawDB(canvas: Canvas): Boolean {
+        if (list == null) {
+            list = DataManager.getDrawList()
+
+            for (draw in list!!) {
+                selectedDraw = draw
+
+                for(coordinate in draw.coordinates) {
+
+                    drawCoordinate = coordinate
+
+                    when (coordinate.drag) {
+                        0 -> onTouchEventActionDown()
+                        1 -> onTouchEventActionMove()
+                        2 -> onTouchEventActionUp()
+                    }
+                    drawTool(canvas)
+                }
+            }
+            selectedDraw = null
+            drawCoordinate = null
+            return false
+        }
+        return true
+    }
+
+    private fun drawTool(canvas: Canvas) {
 
         val toolType = if(selectedDraw == null) tool else selectedDraw!!.tool
 
@@ -156,6 +105,7 @@ class TouchCustomView : View {
         }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
 
         m.x = event.x
@@ -164,7 +114,6 @@ class TouchCustomView : View {
         when (event.action) {
 
             MotionEvent.ACTION_DOWN -> {
-                isDrawing = true
                 onTouchEventActionDown()
             }
 
@@ -176,8 +125,6 @@ class TouchCustomView : View {
             MotionEvent.ACTION_UP -> {
                 onTouchEventActionUp()
                 drawFromDb()
-
-                isDrawing = false
             }
         }
         return true
@@ -240,7 +187,6 @@ class TouchCustomView : View {
         when (selectedDraw?.tool ?: tool) {
 
             PENCIL -> {
-                setErase(false)
                 if (drawCoordinate == null) {
                     setColor(drawColor)
                     DataManager.createCoordinate(draw = coordDraw!!, coord = m, coordDrag = 2)
@@ -256,7 +202,6 @@ class TouchCustomView : View {
             }
 
             LINE -> {
-                setErase(false)
                 if (drawCoordinate == null){
                     setColor(drawColor)
                     DataManager.createCoordinate(draw = coordDraw!!, coord = start, coord2 = m, coordDrag = 2)
@@ -270,7 +215,6 @@ class TouchCustomView : View {
             }
 
             RECTANGLE -> {
-                setErase(false)
                 if (drawCoordinate == null){
                     setColor(drawColor)
                     DataManager.createCoordinate(draw = coordDraw!!, coord = start, coord2 = m, coordDrag = 2)
@@ -284,7 +228,6 @@ class TouchCustomView : View {
             }
 
             CIRCLE -> {
-                setErase(false)
                 if (drawCoordinate == null){
                     setColor(drawColor)
                     DataManager.createCoordinate(draw = coordDraw!!, coord = start, coord2 = m, coordDrag = 2)
@@ -298,7 +241,6 @@ class TouchCustomView : View {
             }
 
             ERASE -> {
-                setErase(true)
                 if (drawCoordinate == null)
                     DataManager.createCoordinate(draw = coordDraw!!, coord = m, coordDrag = 2)
 
@@ -350,7 +292,9 @@ class TouchCustomView : View {
         val bottom = if (pointY2 > pointY) pointY2 else pointY
 
         if (selectedFill) {
-            canvas.drawRect(left, top, right, bottom, strokePaint)
+            drawPaint?.strokeWidth = 1F
+            drawPaint?.color = Color.BLACK
+            canvas.drawRect(left, top, right, bottom, drawPaint)
             canvas.drawRect(left, top, right, bottom, fillPaint)
         }
         else{
@@ -377,7 +321,9 @@ class TouchCustomView : View {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 
             if (selectedFill) {
-                canvas.drawOval(left, top, right, bottom, strokePaint)
+                drawPaint?.strokeWidth = 1F
+                drawPaint?.color = Color.BLACK
+                canvas.drawOval(left, top, right, bottom, drawPaint)
                 canvas.drawOval(left, top, right, bottom, fillPaint)
             }
             else {
@@ -388,7 +334,9 @@ class TouchCustomView : View {
             val oval = RectF(left, top, right, bottom)
 
             if (selectedFill) {
-                canvas.drawOval(oval, strokePaint)
+                drawPaint?.strokeWidth = 1F
+                drawPaint?.color = Color.BLACK
+                canvas.drawOval(oval, drawPaint)
                 canvas.drawOval(oval, fillPaint)
             }
             else {
@@ -433,44 +381,6 @@ class TouchCustomView : View {
         drawPaint!!.strokeWidth = 2 * pixelAmount
     }
 
-    //Borracha
-    fun setErase(isErase: Boolean) {
-
-        if (isErase) {
-            drawPaint!!.alpha = 0
-            drawPaint!!.strokeWidth = shape
-            drawPaint!!.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-
-            if (selectedFill) {
-                fillPaint!!.alpha = 0
-                fillPaint!!.strokeWidth = 1F
-                fillPaint!!.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-                drawPaint!!.strokeWidth = 1F
-            }
-            else
-                drawPaint!!.strokeWidth = shape
-        }
-        else {
-            drawPaint!!.xfermode = null
-            fillPaint!!.xfermode = null
-        }
-    }
-
-    //Apagar todos os desenhos
-    fun setDeleteAllDialog(context: Context) {
-
-        val newDialog = AlertDialog.Builder(context)
-        newDialog.setTitle("Atenção")
-        newDialog.setMessage("Deseja apagar todo o conteúdo editado?")
-        newDialog.setPositiveButton("Sim") { dialog, _ ->
-            drawCanvas!!.drawColor(0, PorterDuff.Mode.CLEAR)
-            invalidate()
-            dialog.dismiss()
-        }
-        newDialog.setNegativeButton("Não") { dialog, _ -> dialog.cancel() }
-        newDialog.show()
-    }
-
     fun initTool() {
 
         drawColor = "db1717"
@@ -479,12 +389,10 @@ class TouchCustomView : View {
 
         if (this.width > 0 && this.height > 0) {
             canvasBitmap = Bitmap.createBitmap(this.width, this.height, Bitmap.Config.ARGB_8888)
-
             drawFromDb()
         }
         setColor(drawColor)
         setShape(shape)
-        setErase(false)
         tool = ERASE
     }
 
@@ -492,18 +400,38 @@ class TouchCustomView : View {
 
         list = null
         invalidate()
+    }
 
-//        val list = DataManager.getDrawList()
-//
-//        isDrawing = true
-//
-//        for(item in list){
-//
-//            when(item.drag){
-//                0 -> onTouchEventActionDown(item.coordX, item.coordY)
-//                1 -> onTouchEventActionMove(item.coordX, item.coordY)
-//                2 -> onTouchEventActionUp(item.coordX, item.coordY)
-//            }
-//        }
+    private fun initializeDrawingView() {
+
+        drawPath = Path()
+
+        drawCanvas = Canvas()
+
+        canvasPaint = Paint(Paint.DITHER_FLAG)
+        canvasPaint!!.isAntiAlias = true
+        canvasPaint!!.isDither = true
+        canvasPaint!!.style = Paint.Style.STROKE
+        canvasPaint!!.strokeJoin = Paint.Join.ROUND
+        canvasPaint!!.strokeCap = Paint.Cap.ROUND
+        canvasPaint!!.strokeWidth = shape
+
+        drawPaint = Paint(Paint.DITHER_FLAG)
+        drawPaint!!.isAntiAlias = true
+        drawPaint!!.isDither = true
+        drawPaint!!.style = Paint.Style.STROKE
+        drawPaint!!.strokeJoin = Paint.Join.ROUND
+        drawPaint!!.strokeCap = Paint.Cap.ROUND
+        drawPaint!!.strokeWidth = shape
+
+        //Fill e Stroke
+        fillPaint = Paint(Paint.DITHER_FLAG)
+        fillPaint!!.isAntiAlias = true
+        fillPaint!!.isDither = true
+        fillPaint!!.style = Paint.Style.FILL
+        fillPaint!!.strokeJoin = Paint.Join.ROUND
+        fillPaint!!.strokeCap = Paint.Cap.ROUND
+        fillPaint!!.strokeWidth = shape
+
     }
 }
